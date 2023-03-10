@@ -233,6 +233,8 @@ function SharedService($rootScope) {
 
     shared.trashObjects = (bucket, keys) => $rootScope.$broadcast('broadcastTrashObjects', { bucket, keys });
 
+    shared.downloadObjects = (bucket, keys) => $rootScope.$broadcast('broadcastDownloadObjects', { bucket, keys });
+
     shared.addFolder = (_bucket, _folder) => $rootScope.$broadcast('broadcastViewRefresh');
 
     // We use pre-signed URLs so that the user can securely download
@@ -453,6 +455,13 @@ function ViewController($scope, SharedService) {
         $('#addedFiles').trigger('click');
     };
 
+    $scope.download = () => {
+        DEBUG.log('Download files');
+        if ($scope.view.keys_selected.length > 0) {
+            SharedService.downloadObjects($scope.view.settings.bucket, $scope.view.keys_selected);
+        }
+    };
+
     $scope.trash = () => {
         DEBUG.log('Trash:', $scope.view.keys_selected);
         if ($scope.view.keys_selected.length > 0) {
@@ -620,6 +629,7 @@ function ViewController($scope, SharedService) {
         }
 
         const s3 = new AWS.S3(AWS.config);
+        s3.endpoint = 'http://';
         const params = {
             Bucket, Prefix, Delimiter, Marker,
         };
@@ -1448,6 +1458,58 @@ function TrashController($scope, SharedService) {
     });
 }
 
+
+function DownloadController($scope) {
+    DEBUG.log('Download files');
+    $scope.download = { title: null, button: null, objects: [] };
+    $scope.$on('broadcastDownloadObjects', (e, args) => {
+        $scope.download.objects = [];
+
+        // Populate scope trash object array with objects to be deleted
+        for (let ii = 0; ii < args.keys.length; ii++) {
+            const obj = args.keys[ii];
+            DEBUG.log('Object to be deleted:', obj);
+            if (isfolder(obj.Key)) {
+
+            } else {
+                const object = path2short(isfolder(obj.Key)
+                ? prefix2folder(obj.Key)
+                : fullpath2filename(obj.Key));
+            
+                DEBUG.log('Object to be deleted:', obj.Key);
+
+                const href = 'http://' + args.bucket + ".s3.guangzhou.stor.deepmap.com/" + obj.Key
+
+                if (obj.Key.endsWith('json')||obj.Key.endsWith('txt')) {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open("GET", href);
+                    xhr.send();
+                    xhr.onload = () => {
+                    if (xhr.readyState == 4 && xhr.status == 200) {
+                        const data = xhr.response;
+                        var blob=new Blob([data]);
+                        var link=document.createElement('a');
+                        link.href=window.URL.createObjectURL(blob);
+                        link.download="myFileName.txt";
+                        link.click();
+                    } else {
+                      console.log(`Error: ${xhr.status}`);
+                    }
+                    };
+                } else {
+                    DEBUG.log('href', href)
+                    const a = document.createElement('a');
+                    a.setAttribute('href', href);
+                    a.setAttribute('download', object);
+                    a.click();
+                }
+            };
+
+        };
+    });
+}
+
+
 // Create Angular module and attach factory and controllers
 angular.module('aws-js-s3-explorer', [])
     .factory('SharedService', SharedService)
@@ -1457,6 +1519,7 @@ angular.module('aws-js-s3-explorer', [])
     .controller('InfoController', InfoController)
     .controller('SettingsController', SettingsController)
     .controller('UploadController', UploadController)
+    .controller('DownloadController', DownloadController)
     .controller('TrashController', TrashController);
 
 $(document).ready(() => {
